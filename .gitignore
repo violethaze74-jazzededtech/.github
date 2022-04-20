@@ -1,0 +1,18 @@
+/bin
+/gh-cli
+.envrc
+/dist
+/site
+.github/**/node_modules
+/CHANGELOG.md
+
+# VS Code
+.vscode
+
+# IntelliJ
+.idea
+
+# macOS
+.DS_Store
+
+vendor/
