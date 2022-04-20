@@ -1,0 +1,34 @@
+{
+  "data": {
+    "repository": {
+      "hasIssuesEnabled": true,
+      "assigned": {
+        "nodes": [
+          {
+              "number": 9,
+              "title": "corey thinks squash tastes bad"
+          },
+          {
+              "number": 10,
+              "title": "broccoli is a superfood"
+          }
+        ]
+      },
+      "mentioned": {
+        "nodes": [
+          {
+              "number": 8,
+              "title": "rabbits eat carrots"
+          },
+          {
+              "number": 11,
+              "title": "swiss chard is neutral"
+          }
+        ]
+      },
+      "authored": {
+        "nodes": []
+      }
+    }
+  }
+}

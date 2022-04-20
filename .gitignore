@@ -1,0 +1,6 @@
+/bin
+/gh-cli
+.envrc
+/dist
+/site
+.github/**/node_modules
