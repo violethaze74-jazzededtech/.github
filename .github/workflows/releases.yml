@@ -1,0 +1,94 @@
+name: goreleaser
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  goreleaser:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Set up Go 1.13
+        uses: actions/setup-go@v2-beta
+        with:
+          go-version: 1.13
+      - name: Generate changelog
+        run: |
+          git fetch --unshallow
+          script/changelog | tee CHANGELOG.md
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v1
+        with:
+          version: latest
+          args: release --release-notes=CHANGELOG.md
+        env:
+          GITHUB_TOKEN: ${{secrets.UPLOAD_GITHUB_TOKEN}}
+      - name: move cards
+        if: "!contains(github.ref, '-')"
+        env:
+          GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+          PENDING_COLUMN: 8189733
+          DONE_COLUMN: 7110130
+        shell: bash
+        run: |
+          curl -fsSL https://github.com/github/hub/raw/master/script/get | bash -s 2.14.1
+          api() { bin/hub api -H 'accept: application/vnd.github.inertia-preview+json' "$@"; }
+          cards=$(api projects/columns/$PENDING_COLUMN/cards | jq ".[].id")
+          for card in $cards; do api projects/columns/cards/$card/moves --field position=top --field column_id=$DONE_COLUMN; done
+      - name: Bump homebrew-core formula
+        uses: mislav/bump-homebrew-formula-action@v1
+        if: "!contains(github.ref, '-')" # skip prereleases
+        with:
+          formula-name: gh
+        env:
+          COMMITTER_TOKEN: ${{ secrets.UPLOAD_GITHUB_TOKEN }}
+  msi:
+    needs: goreleaser
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Download gh.exe
+        id: download_exe
+        shell: bash
+        run: |
+          curl -fsSL https://github.com/github/hub/raw/master/script/get | bash -s 2.14.1
+          bin/hub release download "${GITHUB_REF#refs/tags/}" -i '*windows_amd64*.zip'
+          printf "::set-output name=zip::%s\n" *.zip
+          unzip -o *.zip && rm -v *.zip
+        env:
+          GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+      - name: Install go-msi
+        run: choco install -y "go-msi"
+      - name: Prepare PATH
+        shell: bash
+        run: |
+          echo "::add-path::$WIX\\bin"
+          echo "::add-path::C:\\Program Files\\go-msi"
+      - name: Build MSI
+        id: buildmsi
+        shell: bash
+        run: |
+          mkdir -p build
+          msi="$(basename "${{ steps.download_exe.outputs.zip }}" ".zip").msi"
+          printf "::set-output name=msi::%s\n" "$msi"
+          go-msi make --msi "$PWD/$msi" --out "$PWD/build" --version "${GITHUB_REF#refs/tags/}"
+      - name: Obtain signing cert
+        id: obtain_cert
+        env:
+          DESKTOP_CERT_TOKEN: ${{ secrets.DESKTOP_CERT_TOKEN }}
+        run: .\script\setup-windows-certificate.ps1
+      - name: Sign MSI
+        env:
+          GITHUB_CERT_PASSWORD: ${{ secrets.GITHUB_CERT_PASSWORD }}
+        run: |
+          .\script\sign.ps1 -Certificate "${{ steps.obtain_cert.outputs.cert-file }}" `
+            -Executable "${{ steps.buildmsi.outputs.msi }}"
+      - name: Upload MSI
+        shell: bash
+        run: bin/hub release edit "${GITHUB_REF#refs/tags/}" -m "" -a "${{ steps.buildmsi.outputs.msi }}"
+        env:
+          GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
